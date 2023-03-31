@@ -19,6 +19,10 @@ contract ProxyImplementation is Initializable {
 
     event Revoked(bool revoked);
 
+    constructor() {
+        _disableInitializers();
+    }
+
     function initialize (address _user, IProxyFactory _factory) external onlyInitializing {
         require(user == address(0) && address(factory) == address(0), "already verified");
         user = _user;

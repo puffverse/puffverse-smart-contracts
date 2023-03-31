@@ -45,6 +45,7 @@ contract ActionEvent is SafeOwnable, TimeCore, ReceiverCore {
             require(sendToReceiver(_token, msg.sender, total) == total, "illegal amount");
         }
         emit Action(msg.sender, _token, _action, price, _amount, total, data, block.timestamp);
+        require(msg.value == 0, "illegal native token");
         //emit Action(_token, _action, price, _amount, total, 100);
     }
 

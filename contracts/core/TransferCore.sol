@@ -3,6 +3,7 @@
 pragma solidity >=0.8.4;
 
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
+import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import './SafeOwnableInterface.sol';
 import '../interfaces/IWETH.sol';
@@ -17,7 +18,7 @@ abstract contract TransferCore {
         WETH = _weth;
     }
 
-    function tokenTransferFrom(IERC20 _token, address _from, address _to, uint _amount) internal {
+    function tokenTransferFrom(IERC20 _token, address _from, address _to, uint _amount) internal nonReentrant {
         if (address(_token) == address(WETH)) {
             if (_to == address(this)) {
                 require(msg.value >= _amount, "illegal amount");

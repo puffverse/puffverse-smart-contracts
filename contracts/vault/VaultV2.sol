@@ -38,6 +38,10 @@ contract VaultV2 is SafeOwnable, Operatable, Initializable, IERC721Receiver, IER
     mapping(address => TokenType) public supportTokens;
     mapping(address => bool) public mintableNFTs;
 
+    constructor() {
+        _disableInitializers();
+    }
+
     function initialize(address _owner, address[] memory _operators) external initializer {
         _transferOwnership(_owner);
         for (uint i = 0; i < _operators.length; i ++) {

@@ -22,8 +22,4 @@ contract PuffNewYearNFT is NFTCoreV5 {
         require(totalSupply() < MAX_SUPPLY, "executed");
         return super.mint(to);
     }
-
-    function exists(uint _tokenId) external view returns(bool) {
-        return _exists(_tokenId);
-    }
 }

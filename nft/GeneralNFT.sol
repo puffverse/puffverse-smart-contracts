@@ -18,8 +18,16 @@ contract GeneralNFT is NFTCoreV5 {
         burnInternal(_user, _tokenId);
     }
 
-    function mint(address to) public override returns (uint256 _tokenId) {
+    function mint(address to) public override returns (uint256) {
         require(totalSupply() < MAX_SUPPLY, "executed");
         return super.mint(to);
+    }
+
+    function mintById(address _to, uint _tokenId) external {
+        _mint(_to, _tokenId);
+    }
+
+    function exists(uint _tokenId) external view returns(bool) {
+        return _exists(_tokenId);        
     }
 }

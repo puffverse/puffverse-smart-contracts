@@ -33,4 +33,8 @@ contract GenesisNFTV2 is SafeOwnable, NFTCoreV3, Mintable, Burnable {
     function burn(address _user, uint256 _tokenId) external onlyBurner {
         burnInternal(_user, _tokenId); 
     }
+
+    function exists(uint _tokenId) external view returns(bool) {
+        return _exists(_tokenId);
+    }
 }

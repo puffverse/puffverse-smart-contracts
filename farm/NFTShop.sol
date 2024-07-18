@@ -4,23 +4,23 @@ pragma solidity >=0.8.4;
 
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import '../interfaces/IMintableERC721V3.sol';
+import '../interfaces/IMintableERC721V5.sol';
 import '../core/SafeOwnable.sol';
 import '../core/TimeCore.sol';
 
 contract NFTShop is SafeOwnable, TimeCore {
     using SafeERC20 for IERC20;
 
-    event ItemChanged(uint id, IERC20 paymentToken, uint cost, IMintableERC721V3 receiveNFT, uint receiveNum, bool available);
+    event ItemChanged(uint id, IERC20 paymentToken, uint cost, IMintableERC721V5 receiveNFT, uint receiveNum, bool available);
     event ReceiverChanged(address oldReceiver, address newReceiver);
-    event NftSupplyChanged(IMintableERC721V3 nft, uint oldSupply, uint newSupply);
-    event Buy(uint id, address user, IERC20 paymentToken, uint cost, IMintableERC721V3 receiveNFT, uint[] nftIds, uint timestamp);
+    event NftSupplyChanged(IMintableERC721V5 nft, uint oldSupply, uint newSupply);
+    event Buy(uint id, address user, IERC20 paymentToken, uint cost, IMintableERC721V5 receiveNFT, uint[] nftIds, uint timestamp);
 
     struct Item {
         uint id;
         IERC20 paymentToken;
         uint cost;
-        IMintableERC721V3 receiveNFT;
+        IMintableERC721V5 receiveNFT;
         uint receiveNum;
         bool available;
     }
@@ -28,9 +28,9 @@ contract NFTShop is SafeOwnable, TimeCore {
     IERC20 immutable public WETH;
     Item[] public items;
     address payable public receiver;
-    mapping(IMintableERC721V3 => uint) public nftSupply;
-    mapping(IMintableERC721V3 => uint) public nftSelled;
-    mapping(address => mapping(IMintableERC721V3 => uint)) public userBuyed;
+    mapping(IMintableERC721V5 => uint) public nftSupply;
+    mapping(IMintableERC721V5 => uint) public nftSelled;
+    mapping(address => mapping(IMintableERC721V5 => uint)) public userBuyed;
 
     constructor(IERC20 _WETH, address payable _receiver) {
         WETH = _WETH;
@@ -39,7 +39,7 @@ contract NFTShop is SafeOwnable, TimeCore {
         receiver = _receiver;
     }
 
-    function addItem(IERC20 _paymentToken, uint _cost, IMintableERC721V3 _receiveNFT, uint _receiveNum) internal {
+    function addItem(IERC20 _paymentToken, uint _cost, IMintableERC721V5 _receiveNFT, uint _receiveNum) internal {
         require(address(_paymentToken) != address(0) && address(_receiveNFT) != address(0), "illegal token");
         items.push(Item({
             id: items.length,
@@ -54,7 +54,7 @@ contract NFTShop is SafeOwnable, TimeCore {
         }
     }
 
-    function addItems(IERC20[] memory _paymentTokens, uint[] memory _costs, IMintableERC721V3[] memory _receiveNFTs, uint[] memory _receiveNums) external onlyOwner {
+    function addItems(IERC20[] memory _paymentTokens, uint[] memory _costs, IMintableERC721V5[] memory _receiveNFTs, uint[] memory _receiveNums) external onlyOwner {
         require(_paymentTokens.length == _costs.length && _costs.length == _receiveNFTs.length && _receiveNFTs.length == _receiveNums.length, "illegallength"); 
         unchecked {
             for (uint i = 0; i < _paymentTokens.length; i ++) {
@@ -106,7 +106,7 @@ contract NFTShop is SafeOwnable, TimeCore {
         receiver = _receiver;
     }
 
-    function changeSupply(IMintableERC721V3 _nft, uint _num) external onlyOwner {
+    function changeSupply(IMintableERC721V5 _nft, uint _num) external onlyOwner {
         require(_num >= nftSelled[_nft], "already executed");
         emit NftSupplyChanged(_nft, nftSupply[_nft], _num);
         nftSupply[_nft] = _num;
@@ -125,11 +125,11 @@ contract NFTShop is SafeOwnable, TimeCore {
             item.paymentToken.safeTransferFrom(msg.sender, receiver, _cost);
         }
         uint currentSupply = item.receiveNFT.totalSupply();
-        item.receiveNFT.mint(msg.sender, item.receiveNum);
         nftSelled[item.receiveNFT] += item.receiveNum;
         userBuyed[msg.sender][item.receiveNFT] += item.receiveNum;
         uint[] memory nftIds = new uint[](item.receiveNum);
         for (uint i = 0; i < item.receiveNum; i ++) {
+            item.receiveNFT.mint(msg.sender);
             nftIds[i] = currentSupply + i + 1;
         }
         emit Buy(_id, msg.sender, item.paymentToken, item.cost, item.receiveNFT, nftIds, block.timestamp);

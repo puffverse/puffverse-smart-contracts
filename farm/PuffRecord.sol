@@ -7,8 +7,8 @@ contract PuffRecord {
     uint public nonce = 0;
     event Record(uint nonce, uint tokenId, uint tokenType, address user);
 
-    constructor() {
-        nonce = 1;
+    constructor(uint _nonce) {
+        nonce = _nonce;
     }
 
     function search(uint tokenId, uint tokenType) external {

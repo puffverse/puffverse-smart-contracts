@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity >=0.8.4;
+pragma solidity =0.8.20;
 
 import '@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol';
-import '../core/SafeOwnable.sol';
 
-contract MockERC721 is SafeOwnable, ERC721Enumerable {
+contract MockERC721 is ERC721Enumerable {
 
     string public baseURI;
 
@@ -21,11 +20,11 @@ contract MockERC721 is SafeOwnable, ERC721Enumerable {
         baseURI = _uri;
     }
 
-    function mint(address _to, uint _tokenId) external onlyOwner {
+    function mint(address _to, uint _tokenId) external {
         _mint(_to, _tokenId);
     }
 
-    function setBaseURI(string memory _uri) external onlyOwner {
+    function setBaseURI(string memory _uri) external {
         baseURI = _uri;
     }
 }

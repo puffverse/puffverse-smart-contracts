@@ -44,6 +44,7 @@ contract FeeDistributor is Initializable, UUPSUpgradeable, AccessControlUpgradea
     mapping(uint => uint) public timeCursorOf;
     mapping(uint => uint) public nftEpochOf;
     mapping(uint => mapping(uint => uint)) public claimed;
+    mapping(uint => uint) public tokensTotalWeek;
 
     constructor(IVotingEscrow _votingEscrow) {
         votingEscrow = _votingEscrow;
@@ -68,12 +69,24 @@ contract FeeDistributor is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
     function claim(uint tokenId) external nonReentrant whenNotPaused returns (uint) {
         require(votingEscrow.nftOwner(tokenId) == msg.sender, "Not owner");
+        return _claimFor(tokenId,false);
+    }
 
+    function claimVE(uint tokenId) external nonReentrant whenNotPaused  {
+        require(address(votingEscrow) == msg.sender, "Not votingEscrow");
+        _claimFor(tokenId,true);
+    }
+
+    function _claimFor(uint tokenId, bool isVE) internal returns (uint) {
         if (block.timestamp >= timeCursor) _totalSupplyCheckpoint();
         uint currentWeek = lastTokenTime / WEEK * WEEK;
         uint amount = _claim(tokenId, currentWeek);
         if (amount != 0) {
-            lockToken.safeTransfer(msg.sender, amount);
+            if (isVE) {
+                lockToken.safeTransfer(votingEscrow.nftOwner(tokenId), amount);
+            } else {
+                lockToken.safeTransfer(msg.sender, amount);
+            }
             tokenLastBalance -= amount;
             totalClaimed += amount;
         }
@@ -123,6 +136,11 @@ contract FeeDistributor is Initializable, UUPSUpgradeable, AccessControlUpgradea
     function getDonateInfo(uint timestamp) external view returns(uint, uint) {
         uint week = timestamp / WEEK * WEEK;
         return (votingEscrow.totalPowerAt(week), tokensPerWeek[week]);
+    }
+
+
+    function withdrawReward(address _token, uint _amount) external onlyRole(ADMIN_ROLE) {
+        IERC20(_token).safeTransfer(msg.sender, _amount);
     }
 
     function _findTimestampEpoch(uint timestamp) internal view returns (uint) {
@@ -205,10 +223,10 @@ contract FeeDistributor is Initializable, UUPSUpgradeable, AccessControlUpgradea
                 }
             } else {
                 int128 dt = int128(int256(currentWeekCursor - oldNftPoint.ts));
-                uint balance_of = uint256(SignedMath.max(int256(oldNftPoint.bias - dt * oldNftPoint.slope), 0));
-                if (balance_of == 0 && nftEpoch > maxNftEpoch) break;
-                if (balance_of > 0) {
-                    toDistribute += balance_of * tokensPerWeek[currentWeekCursor] / veSupply[currentWeekCursor] - claimed[tokenId][currentWeekCursor];
+                uint balanceOf = uint256(SignedMath.max(int256(oldNftPoint.bias - dt * oldNftPoint.slope), 0));
+                if (balanceOf == 0 && nftEpoch > maxNftEpoch) break;
+                if (balanceOf > 0) {
+                    toDistribute += balanceOf * tokensPerWeek[currentWeekCursor] / veSupply[currentWeekCursor] - claimed[tokenId][currentWeekCursor];
                     claimed[tokenId][currentWeekCursor] += toDistribute;
                 }
                 currentWeekCursor += WEEK;
@@ -266,7 +284,7 @@ contract FeeDistributor is Initializable, UUPSUpgradeable, AccessControlUpgradea
                 uint balanceOf = uint256(SignedMath.max(int256(oldNftPoint.bias - dt * oldNftPoint.slope), 0));
                 if (balanceOf == 0 && nftEpoch > maxNftEpoch) break;
                 if (balanceOf > 0) {
-                    toDistribute += balanceOf * tokensPerWeek[currentWeekCursor] / veSupply[currentWeekCursor] - claimed[tokenId][currentWeek];
+                    toDistribute += balanceOf * tokensPerWeek[currentWeekCursor] / veSupply[currentWeekCursor] - claimed[tokenId][currentWeekCursor];
                 }
                 currentWeekCursor += WEEK;
             }
@@ -305,6 +323,7 @@ contract FeeDistributor is Initializable, UUPSUpgradeable, AccessControlUpgradea
         lastTokenTime = block.timestamp;
         uint currentWeek = lastTokenTime / WEEK * WEEK;
         tokensPerWeek[currentWeek] += toDistribute;
+        tokensTotalWeek[currentWeek]  = votingEscrow.totalLocked();
 
         emit CheckpointToken(block.timestamp, toDistribute);
     }

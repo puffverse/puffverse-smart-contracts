@@ -216,6 +216,9 @@ contract VotingEscrow is
 
         LockedBalance memory locked = lockedBalances[tokenId];
         require(block.timestamp >= locked.end, "Lock not expired");
+
+        feeDistributor.claimVE(tokenId);
+
         uint value = uint(int256(locked.amount));
 
         lockedBalances[tokenId] = LockedBalance(0, 0, 0, 0);
@@ -247,6 +250,8 @@ contract VotingEscrow is
         require(locked.amount > 0, "Not exist");
         require(locked.end > block.timestamp, "Pls use withdraw");
 
+        feeDistributor.claimVE(tokenId);
+
         uint256 unlockAmount = uint256(uint128(locked.amount));
 
         uint256 timeLeft = locked.end - block.timestamp;
@@ -270,7 +275,7 @@ contract VotingEscrow is
         }
         if(address(feeDistributor) != address(0) && penalty > 0){
             LOCK_TOKEN.safeTransfer(address(feeDistributor), penalty); // to penalty account
-            feeDistributor.updateCheckpoint();
+            feeDistributor.checkpoint();
             forcePenaltyAmount[block.timestamp / WEEK * WEEK] += penalty;
         }
         //emit Event
@@ -457,16 +462,17 @@ contract VotingEscrow is
     function getLockedDetail(uint tokenId) external view returns(LockedBalance memory) {
         return lockedBalances[tokenId];
     }
-    
-    function getPenalty(uint tokenId) external view returns(uint256 penalty) {
-        require(_ownerOf(tokenId) == msg.sender, "Not owner");
 
+    function getPenalty(uint tokenId) external view returns(uint256) {
+        uint256 penalty = 0;
         LockedBalance memory locked = lockedBalances[tokenId];
-        require(locked.amount > 0, "Not exist");
-        require(locked.end > block.timestamp, "Pls use withdraw");
 
-        uint256 unlockAmount = uint256(uint128(locked.amount));
-        penalty = unlockAmount * (maxRatio - (block.timestamp - locked.begin) * minRatio / (locked.end - locked.begin)) / MULTIPLIER;
+        if (locked.amount > 0 && locked.end > block.timestamp) {
+            uint256 unlockAmount = uint256(uint128(locked.amount));
+            penalty = unlockAmount * (maxRatio - (block.timestamp - locked.begin) * minRatio / (locked.end - locked.begin)) / MULTIPLIER;
+        }
+        
+        return penalty;
     }
 
     function userLocked(address account) external view returns(uint256 amount, uint256 point) {

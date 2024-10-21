@@ -3,5 +3,6 @@
 pragma solidity =0.8.20;
 
 interface IFeeDistributor {
-    function updateCheckpoint() external;
+    function checkpoint() external;
+    function claimVE(uint tokenId) external ;
 }

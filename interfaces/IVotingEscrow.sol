@@ -29,6 +29,8 @@ interface IVotingEscrow {
     function LOCK_TOKEN() external view returns(IERC20);
     function BOOST_NFT() external view returns(IERC721);
     function epoch() external view returns(uint256);
+    function totalLocked() external view returns(uint256);
+
     function createLock(
         uint _lockAmount, 
         uint _lockDuration, 

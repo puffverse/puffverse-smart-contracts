@@ -97,7 +97,9 @@ contract VotingEscrow is
     mapping(uint => uint) public override forcePenaltyAmount;
 
     constructor(IERC20 _lockToken, IERC721 _boostNFT, ISvgBuilderClient _svgBuilderClient) {
+        require(address(_lockToken) != address(0), "invalid token");
         LOCK_TOKEN = _lockToken;
+        require(address(_boostNFT) != address(0), "invalid boost nft");
         BOOST_NFT = _boostNFT;
         SVG_BUILDER_CLIENT = _svgBuilderClient;
         _disableInitializers();
@@ -110,6 +112,9 @@ contract VotingEscrow is
         __ReentrancyGuard_init_unchained();
         __Pausable_init();
 
+
+        require(_minRatio <= _maxRatio, "Invalid: minRatio must be <= maxRatio");
+        require(_maxRatio < MULTIPLIER, "Invalid: maxRatio must be < MULTIPLIER");
         minRatio = _minRatio;
         maxRatio = _maxRatio;
 
@@ -190,6 +195,11 @@ contract VotingEscrow is
         if (lockAmount != 0 && unlockTime != 0) {
             lockedBalance.begin = block.timestamp;
         }
+
+        uint256 int128Max = 2**127 - 1;
+        require(lockAmount <= int128Max, "Overflow 1: lockAmount exceeds int128 max");
+        require(lockPoint <= int128Max, "Overflow 2: lockPoint exceeds int128 max");
+
         lockedBalance.amount += int128(int256(lockAmount));
         lockedBalance.point += int128(int256(lockPoint));
         if (unlockTime != 0) {
@@ -250,8 +260,6 @@ contract VotingEscrow is
         require(locked.amount > 0, "Not exist");
         require(locked.end > block.timestamp, "Pls use withdraw");
 
-        feeDistributor.claimVE(tokenId);
-
         uint256 unlockAmount = uint256(uint128(locked.amount));
 
         uint256 timeLeft = locked.end - block.timestamp;
@@ -273,7 +281,9 @@ contract VotingEscrow is
             BOOST_NFT.safeTransferFrom(address(this), msg.sender, boostNftId);
             delete boostNFT[tokenId];
         }
-        if(address(feeDistributor) != address(0) && penalty > 0){
+
+        if(penalty > 0){
+            require(address(feeDistributor) != address(0), "FeeDistributor not set");
             LOCK_TOKEN.safeTransfer(address(feeDistributor), penalty); // to penalty account
             feeDistributor.checkpoint();
             forcePenaltyAmount[block.timestamp / WEEK * WEEK] += penalty;
@@ -426,13 +436,13 @@ contract VotingEscrow is
 
 
     function configMinRatio(uint256 _minRatio) external onlyRole(ADMIN_ROLE) {
-        require(minRatio <= maxRatio, "E1");
+        require(_minRatio <= maxRatio, "E1");
         minRatio = _minRatio;
     }
 
     function configMaxRatio(uint256 _maxRatio) external onlyRole(ADMIN_ROLE) {
-        require(maxRatio < MULTIPLIER, "E1");
-        require(maxRatio >= minRatio, "E2");
+        require(_maxRatio < MULTIPLIER, "E1");
+        require(_maxRatio >= minRatio, "E2");
         maxRatio = _maxRatio;
     }
 
@@ -462,17 +472,16 @@ contract VotingEscrow is
     function getLockedDetail(uint tokenId) external view returns(LockedBalance memory) {
         return lockedBalances[tokenId];
     }
+    
+    function getPenalty(uint tokenId) external view returns(uint256 penalty) {
+        require(_ownerOf(tokenId) == msg.sender, "Not owner");
 
-    function getPenalty(uint tokenId) external view returns(uint256) {
-        uint256 penalty = 0;
         LockedBalance memory locked = lockedBalances[tokenId];
+        require(locked.amount > 0, "Not exist");
+        require(locked.end > block.timestamp, "Pls use withdraw");
 
-        if (locked.amount > 0 && locked.end > block.timestamp) {
-            uint256 unlockAmount = uint256(uint128(locked.amount));
-            penalty = unlockAmount * (maxRatio - (block.timestamp - locked.begin) * minRatio / (locked.end - locked.begin)) / MULTIPLIER;
-        }
-        
-        return penalty;
+        uint256 unlockAmount = uint256(uint128(locked.amount));
+        penalty = unlockAmount * (maxRatio - (block.timestamp - locked.begin) * minRatio / (locked.end - locked.begin)) / MULTIPLIER;
     }
 
     function userLocked(address account) external view returns(uint256 amount, uint256 point) {

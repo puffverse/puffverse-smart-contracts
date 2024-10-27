@@ -32,6 +32,7 @@ contract TokenLocker is ITokenLocker {
         uint256 _cycleReleaseAmount
     ) {
         TOKEN = token;
+        require(_receiver != address(0), "receiver cannot be zero address");
         receiver = _receiver;
         firstReleaseAmount = _firstReleaseAmount;
         startTime = _startTime;

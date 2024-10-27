@@ -20,7 +20,9 @@ contract TokenLockerFactory is AccessControlEnumerable {
         IPuffERC20 token,
         address admin
     ) {
+        require(address(token) != address(0), "token address is zero");
         TOKEN = token;
+        require(admin != address(0), "admin address is zero");
         _grantRole(ADMIN_ROLE, admin);
     }
 

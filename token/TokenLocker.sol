@@ -43,7 +43,7 @@ contract TokenLocker is ITokenLocker {
 
     function available() public view returns (uint256) {
         uint amount = firstReleaseAmount;
-        for (uint cycle = 0; cycle <= cycleNum; cycle ++) {
+        for (uint cycle = 0; cycle < cycleNum; cycle ++) {
             uint releaseTime = startTime + cycle * interval + 1;
             if (block.timestamp >= releaseTime) {
                 amount += cycleReleaseAmount;

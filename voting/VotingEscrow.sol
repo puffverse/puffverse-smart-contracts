@@ -34,14 +34,14 @@ import '../interfaces/ISvgBuilderClient.sol';
 # 0 +--------+------> time
 #       maxtime (4 years)
 */
-contract VotingEscrow is 
-    IVotingEscrow, 
-    ERC721EnumerableUpgradeable, 
-    UUPSUpgradeable, 
-    AccessControlEnumerableUpgradeable, 
-    ReentrancyGuardUpgradeable, 
-    PausableUpgradeable,
-    ERC721HolderUpgradeable
+contract VotingEscrow is
+IVotingEscrow,
+ERC721EnumerableUpgradeable,
+UUPSUpgradeable,
+AccessControlEnumerableUpgradeable,
+ReentrancyGuardUpgradeable,
+PausableUpgradeable,
+ERC721HolderUpgradeable
 {
     using Strings for uint256;
     using SafeERC20 for IERC20;
@@ -53,6 +53,7 @@ contract VotingEscrow is
     uint256 public constant MIN_LOCK_AMOUNT = 1e17;
     IERC20 public immutable LOCK_TOKEN;
     IERC721 public immutable BOOST_NFT;
+    IERC721 public immutable SPEED_NFT;
     ISvgBuilderClient private immutable SVG_BUILDER_CLIENT;
 
     event Deposit(
@@ -81,6 +82,7 @@ contract VotingEscrow is
     mapping(uint => uint) public nftPointEpoch;
     mapping(uint => Point[1000000000]) public nftPointHistory; // user -> Point[user_epoch]
     mapping(uint => uint) public boostNFT;
+    mapping(uint => uint) public speedNFT;
 
     /// @dev Current count of token
     uint256 public maxTokenId;
@@ -95,18 +97,20 @@ contract VotingEscrow is
     uint256 public maxRatio;
     IFeeDistributor public feeDistributor;
     mapping(uint => uint) public override forcePenaltyAmount;
+    address public forcePenaltyReciever;
 
-    constructor(IERC20 _lockToken, IERC721 _boostNFT, ISvgBuilderClient _svgBuilderClient) {
+    constructor(IERC20 _lockToken, IERC721 _boostNFT, IERC721 _speedNFT, ISvgBuilderClient _svgBuilderClient) {
         require(address(_lockToken) != address(0), "invalid token");
         LOCK_TOKEN = _lockToken;
         require(address(_boostNFT) != address(0), "invalid boost nft");
         BOOST_NFT = _boostNFT;
+        SPEED_NFT = _speedNFT;
         SVG_BUILDER_CLIENT = _svgBuilderClient;
         _disableInitializers();
     }
 
 
-    function initialize(address _admin, uint _minRatio, uint _maxRatio) public initializer {
+    function initialize(address _admin, address _forcePenaltyReciever, uint _minRatio, uint _maxRatio) public initializer {
         __ERC721_init("vePuff", "vePuff");
         __AccessControl_init();
         __ReentrancyGuard_init_unchained();
@@ -117,6 +121,7 @@ contract VotingEscrow is
         require(_maxRatio < MULTIPLIER, "Invalid: maxRatio must be < MULTIPLIER");
         minRatio = _minRatio;
         maxRatio = _maxRatio;
+        forcePenaltyReciever = _forcePenaltyReciever;
 
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _grantRole(ADMIN_ROLE, _admin);
@@ -131,7 +136,7 @@ contract VotingEscrow is
         _;
     }
 
-    function calculatePoint(uint _lockAmount, uint _duration, uint _boostTokenId) internal pure returns (uint) {
+    function calculatePoint(uint _lockAmount, uint _duration, uint _boostTokenId, uint _speedTokenId) internal pure returns (uint) {
         uint point = _lockAmount;
         if (_duration <= 4 * WEEK) {
             point *= 100;
@@ -148,32 +153,41 @@ contract VotingEscrow is
         }
         if (_boostTokenId > 0) {
             point = point * 130 / 100;
+        }else if (_speedTokenId > 0) {
+            point = point * 110 / 100;
         }
         return point / 100;
     }
 
     function createLock(
-        uint _lockAmount, 
-        uint _lockDuration, 
-        address _for, 
-        uint _boostTokenId
+        uint _lockAmount,
+        uint _lockDuration,
+        address _for,
+        uint _boostTokenId,
+        uint _speedTokenId
     ) external whenNotPaused nonReentrant oncePerBlock(_for) returns (uint) {
         require(_lockDuration > 0 && _lockDuration <= MAX_TIME, 'Invalid duration');
-        uint unlockTime = (block.timestamp + _lockDuration) / WEEK * WEEK; // LockTime is Can only increase lock duration rounded down to weeks
-        require(_lockAmount >= MIN_LOCK_AMOUNT, 'Invalid amount'); //need more than 0.1
+        uint unlockTime = (block.timestamp + _lockDuration) / WEEK * WEEK;
+        // LockTime is Can only increase lock duration rounded down to weeks
+        require(_lockAmount >= MIN_LOCK_AMOUNT, 'Invalid amount');
+        //need more than 0.1
         require(unlockTime > block.timestamp, 'Can only lock until time in the future');
         _lockDuration = unlockTime - block.timestamp;
-        uint lockPoint = calculatePoint(_lockAmount, _lockDuration, _boostTokenId);
+        uint lockPoint = calculatePoint(_lockAmount, _lockDuration, _boostTokenId, _speedTokenId);
 
-        ++ maxTokenId;
+        ++maxTokenId;
         uint tokenId = maxTokenId;
         _safeMint(_for, tokenId);
         if (_boostTokenId > 0) {
             BOOST_NFT.safeTransferFrom(msg.sender, address(this), _boostTokenId);
+        }else if (_speedTokenId > 0) {
+            SPEED_NFT.safeTransferFrom(msg.sender, address(this), _speedTokenId);
         }
         boostNFT[tokenId] = _boostTokenId;
+        speedNFT[tokenId] = _speedTokenId;
 
-        sumLockedTime = sumLockedTime + _lockDuration; // add locked time
+        sumLockedTime = sumLockedTime + _lockDuration;
+        // add locked time
         _depositFor(tokenId, _lockAmount, lockPoint, unlockTime, lockedBalances[tokenId]);
         return tokenId;
     }
@@ -196,7 +210,7 @@ contract VotingEscrow is
             lockedBalance.begin = block.timestamp;
         }
 
-        uint256 int128Max = 2**127 - 1;
+        uint256 int128Max = 2 ** 127 - 1;
         require(lockAmount <= int128Max, "Overflow 1: lockAmount exceeds int128 max");
         require(lockPoint <= int128Max, "Overflow 2: lockPoint exceeds int128 max");
 
@@ -246,6 +260,11 @@ contract VotingEscrow is
             BOOST_NFT.safeTransferFrom(address(this), msg.sender, boostNftId);
             delete boostNFT[tokenId];
         }
+        uint speedNftId = speedNFT[tokenId];
+        if (speedNftId > 0) {
+            SPEED_NFT.safeTransferFrom(address(this), msg.sender, speedNftId);
+            delete speedNFT[tokenId];
+        }
         _burn(tokenId);
         // save latest owner
         latestOwner[tokenId] = msg.sender;
@@ -260,6 +279,8 @@ contract VotingEscrow is
         require(locked.amount > 0, "Not exist");
         require(locked.end > block.timestamp, "Pls use withdraw");
 
+        feeDistributor.claimVE(tokenId);
+
         uint256 unlockAmount = uint256(uint128(locked.amount));
 
         uint256 timeLeft = locked.end - block.timestamp;
@@ -270,7 +291,7 @@ contract VotingEscrow is
         _burn(tokenId);
         latestOwner[tokenId] = msg.sender;
         lockedBalances[tokenId] = LockedBalance(0, 0, 0, 0);
-        sumLockedTime =  sumLockedTime - timeLeft;
+        sumLockedTime = sumLockedTime - timeLeft;
 
         uint supplyBefore = totalLocked;
         totalLocked = supplyBefore - unlockAmount;
@@ -281,10 +302,20 @@ contract VotingEscrow is
             BOOST_NFT.safeTransferFrom(address(this), msg.sender, boostNftId);
             delete boostNFT[tokenId];
         }
+        uint speedNftId = speedNFT[tokenId];
+        if (speedNftId > 0) {
+            SPEED_NFT.safeTransferFrom(address(this), msg.sender, speedNftId);
+            delete speedNFT[tokenId];
+        }
 
-        if(penalty > 0){
+        if (penalty > 0) {
+            if (forcePenaltyReciever != address(0)) {
+                LOCK_TOKEN.safeTransfer(forcePenaltyReciever, penalty * 20 / 100);
+                penalty -= (penalty * 20 / 100);
+            }
             require(address(feeDistributor) != address(0), "FeeDistributor not set");
-            LOCK_TOKEN.safeTransfer(address(feeDistributor), penalty); // to penalty account
+            LOCK_TOKEN.safeTransfer(address(feeDistributor), penalty);
+            // to penalty account
             feeDistributor.checkpoint();
             forcePenaltyAmount[block.timestamp / WEEK * WEEK] += penalty;
         }
@@ -329,16 +360,17 @@ contract VotingEscrow is
             }
         }
 
-        Point memory last_point = Point({bias: 0, slope: 0, ts: block.timestamp, blk: block.number});
+        Point memory last_point = Point({bias : 0, slope : 0, ts : block.timestamp, blk : block.number});
         if (currentEpoch > 0) {
             last_point = pointHistory[currentEpoch];
         }
         uint last_checkpoint = last_point.ts;
         // initial_last_point is used for extrapolation to calculate block number(approximately, for *At methods) and save them
         // Deep copy (share same reference with last_point will cause dirty memory)
-        Point memory initial_last_point = Point({bias: last_point.bias, slope: last_point.slope, ts: last_point.ts, blk: last_point.blk});
+        Point memory initial_last_point = Point({bias : last_point.bias, slope : last_point.slope, ts : last_point.ts, blk : last_point.blk});
 
-        uint block_slope = 0; // dblock/dt
+        uint block_slope = 0;
+        // dblock/dt
         if (block.timestamp > last_point.ts) {
             block_slope = (MULTIPLIER * (block.number - last_point.blk)) / (block.timestamp - last_point.ts);
         }
@@ -408,14 +440,16 @@ contract VotingEscrow is
                 // oldDslope was <something> - userOldPoint.slope, so we cancel that
                 oldDslope += userOldPoint.slope;
                 if (newLocked.end == oldLocked.end) {
-                    oldDslope -= userNewPoint.slope; // It was a new deposit, not extension
+                    oldDslope -= userNewPoint.slope;
+                    // It was a new deposit, not extension
                 }
                 slopeChanges[oldLocked.end] = oldDslope;
             }
 
             if (newLocked.end > block.timestamp) {
                 if (newLocked.end > oldLocked.end) {
-                    newDslope -= userNewPoint.slope; // old slope disappeared at this point
+                    newDslope -= userNewPoint.slope;
+                    // old slope disappeared at this point
                     slopeChanges[newLocked.end] = newDslope;
                 }
                 // else: we recorded it already in oldDslope
@@ -438,6 +472,10 @@ contract VotingEscrow is
     function configMinRatio(uint256 _minRatio) external onlyRole(ADMIN_ROLE) {
         require(_minRatio <= maxRatio, "E1");
         minRatio = _minRatio;
+    }
+
+    function configForcePenaltyReciever(address newAddr) external onlyRole(ADMIN_ROLE) {
+        forcePenaltyReciever = newAddr;
     }
 
     function configMaxRatio(uint256 _maxRatio) external onlyRole(ADMIN_ROLE) {
@@ -463,30 +501,29 @@ contract VotingEscrow is
 
     function nftOwner(uint tokenId) external view returns (address) {
         address owner = latestOwner[tokenId];
-        if(owner == address(0)){
+        if (owner == address(0)) {
             owner = ownerOf(tokenId);
         }
         return owner;
     }
 
-    function getLockedDetail(uint tokenId) external view returns(LockedBalance memory) {
+    function getLockedDetail(uint tokenId) external view returns (LockedBalance memory) {
         return lockedBalances[tokenId];
     }
-    
-    function getPenalty(uint tokenId) external view returns(uint256 penalty) {
-        require(_ownerOf(tokenId) == msg.sender, "Not owner");
 
+    function getPenalty(uint tokenId) external view returns(uint256) {
+        uint256 penalty = 0;
         LockedBalance memory locked = lockedBalances[tokenId];
-        require(locked.amount > 0, "Not exist");
-        require(locked.end > block.timestamp, "Pls use withdraw");
-
-        uint256 unlockAmount = uint256(uint128(locked.amount));
-        penalty = unlockAmount * (maxRatio - (block.timestamp - locked.begin) * minRatio / (locked.end - locked.begin)) / MULTIPLIER;
+        if (locked.amount > 0 && locked.end > block.timestamp) {
+            uint256 unlockAmount = uint256(uint128(locked.amount));
+            penalty = unlockAmount * (maxRatio - (block.timestamp - locked.begin) * minRatio / (locked.end - locked.begin)) / MULTIPLIER;
+        }
+        return penalty;
     }
 
-    function userLocked(address account) external view returns(uint256 amount, uint256 point) {
+    function userLocked(address account) external view returns (uint256 amount, uint256 point) {
         uint256[] memory tokenIds = tokensOfOwner(account);
-        for(uint i = 0; i < tokenIds.length; i ++){
+        for (uint i = 0; i < tokenIds.length; i ++) {
             LockedBalance memory lockedBalance = lockedBalances[tokenIds[i]];
             amount += uint256(int256(lockedBalance.amount));
             point += uint256(int256(lockedBalance.point));
@@ -525,7 +562,7 @@ contract VotingEscrow is
     function powerOfAccount(address account) external view returns (uint){
         uint256[] memory tokenIds = tokensOfOwner(account);
         uint power = 0;
-        for(uint i=0; i<tokenIds.length; i++){
+        for (uint i = 0; i < tokenIds.length; i++) {
             power += powerOfNftAt(tokenIds[i], block.timestamp);
         }
         return power;
@@ -534,13 +571,13 @@ contract VotingEscrow is
     function powerOfAccountAt(address account, uint timestamp) external view returns (uint){
         uint256[] memory tokenIds = tokensOfOwner(account);
         uint power = 0;
-        for(uint i=0; i<tokenIds.length; i++){
+        for (uint i = 0; i < tokenIds.length; i++) {
             power += powerOfNftAt(tokenIds[i], timestamp);
         }
         return power;
     }
 
-    function findTimestampEpoch(uint timestamp, uint maxEpoch) internal view returns(uint) {
+    function findTimestampEpoch(uint timestamp, uint maxEpoch) internal view returns (uint) {
         uint min = 0;
         uint max = maxEpoch;
 
@@ -558,8 +595,8 @@ contract VotingEscrow is
         return min;
     }
 
-    function supplyAt(Point memory lastPoint, uint timestamp) internal view returns(uint) {
-        uint currentTime = lastPoint.ts / WEEK * WEEK; 
+    function supplyAt(Point memory lastPoint, uint timestamp) internal view returns (uint) {
+        uint currentTime = lastPoint.ts / WEEK * WEEK;
         for (uint i = 0; i < 255; i ++) {
             currentTime += WEEK;
             int128 dSlope = 0;
@@ -584,7 +621,7 @@ contract VotingEscrow is
     function totalPowerAt(uint timestamp) public view returns (uint) {
         uint currentEpoch = epoch;
         if (timestamp != block.timestamp) {
-            currentEpoch = findTimestampEpoch(timestamp, currentEpoch); 
+            currentEpoch = findTimestampEpoch(timestamp, currentEpoch);
         }
         if (currentEpoch == 0) {
             return 0;

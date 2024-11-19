@@ -12,6 +12,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
 import "../interfaces/IVotingEscrow.sol";
+import "../interfaces/IFeeDistributor.sol";
 
 contract FeeDistributor is Initializable, UUPSUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable {
 
@@ -44,6 +45,7 @@ contract FeeDistributor is Initializable, UUPSUpgradeable, AccessControlUpgradea
     mapping(uint => uint) public timeCursorOf;
     mapping(uint => uint) public nftEpochOf;
     mapping(uint => mapping(uint => uint)) public claimed;
+    mapping(uint => uint) public tokensTotalWeek;
 
     constructor(IVotingEscrow _votingEscrow) {
         votingEscrow = _votingEscrow;
@@ -322,6 +324,7 @@ contract FeeDistributor is Initializable, UUPSUpgradeable, AccessControlUpgradea
         lastTokenTime = block.timestamp;
         uint currentWeek = lastTokenTime / WEEK * WEEK;
         tokensPerWeek[currentWeek] += toDistribute;
+        tokensTotalWeek[currentWeek]  = votingEscrow.totalLocked();
 
         emit CheckpointToken(block.timestamp, toDistribute);
     }

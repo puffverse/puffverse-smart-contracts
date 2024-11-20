@@ -60,9 +60,9 @@ contract VotingVault is Initializable, UUPSUpgradeable, AccessControlUpgradeable
     function _authorizeUpgrade(address newImplementation) internal override onlyRole(ADMIN_ROLE) {}
 
     function createLock(
-        uint _lockAmount, 
-        uint _lockDuration, 
-        address _for, 
+        uint _lockAmount,
+        uint _lockDuration,
+        address _for,
         uint _boostTokenId,
         uint _speedTokenId
     ) external onlyRole(OPERATOR_ROLE) returns (uint) {
@@ -88,8 +88,7 @@ contract VotingVault is Initializable, UUPSUpgradeable, AccessControlUpgradeable
     }
 
     function donate(
-        SwapInfo[] calldata swapInfos,
-        uint totalAmount
+        SwapInfo[] calldata swapInfos
     ) external onlyRole(OPERATOR_ROLE) {
         for (uint i = 0; i < swapInfos.length; i ++) {
             SwapInfo memory swapInfo = swapInfos[i];
@@ -104,9 +103,8 @@ contract VotingVault is Initializable, UUPSUpgradeable, AccessControlUpgradeable
 
             IERC20 tokenOut = IERC20(swapInfo.path[swapInfo.path.length - 1]);
             uint tokenOutBalanceBefore = tokenOut.balanceOf(address(this));
-            if (address(tokenOut) == address(tokenIn)) {
-                tokenIn.safeTransferFrom(swapInfo.user, address(this), swapInfo.amountIn);                
-            } else {
+            tokenIn.safeTransferFrom(swapInfo.user, address(this), swapInfo.amountIn);
+            if (address(tokenOut) != address(tokenIn)) {
                 IERC20(swapInfo.path[0]).approve(address(router), swapInfo.amountIn);
                 router.swapExactTokensForTokens(
                     swapInfo.amountIn,
@@ -123,9 +121,6 @@ contract VotingVault is Initializable, UUPSUpgradeable, AccessControlUpgradeable
             }
         }
         uint balance = lockToken.balanceOf(address(this));
-        if (balance < totalAmount) {
-            totalAmount = balance;
-        }
         if (balance > 0) {
             lockToken.safeTransfer(address(feeDistributor), balance);
             feeDistributor.checkpoint();

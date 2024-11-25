@@ -178,11 +178,11 @@ contract VotingEscrow is
         _safeMint(_for, tokenId);
         if (_boostTokenId > 0) {
             BOOST_NFT.safeTransferFrom(msg.sender, address(this), _boostTokenId);
+             boostNFT[tokenId] = _boostTokenId;
         }else if (_speedTokenId > 0) {
             SPEED_NFT.safeTransferFrom(msg.sender, address(this), _speedTokenId);
+            speedNFT[tokenId] = _speedTokenId;
         }
-        boostNFT[tokenId] = _boostTokenId;
-        speedNFT[tokenId] = _speedTokenId;
 
         sumLockedTime = sumLockedTime + _lockDuration; // add locked time
         _depositFor(tokenId, _lockAmount, lockPoint, unlockTime, lockedBalances[tokenId]);

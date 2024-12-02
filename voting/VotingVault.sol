@@ -88,7 +88,8 @@ contract VotingVault is Initializable, UUPSUpgradeable, AccessControlUpgradeable
     }
 
     function donate(
-        SwapInfo[] calldata swapInfos
+        SwapInfo[] calldata swapInfos,
+        uint deadline
     ) external onlyRole(OPERATOR_ROLE) {
         for (uint i = 0; i < swapInfos.length; i ++) {
             SwapInfo memory swapInfo = swapInfos[i];
@@ -102,6 +103,13 @@ contract VotingVault is Initializable, UUPSUpgradeable, AccessControlUpgradeable
             }
 
             IERC20 tokenOut = IERC20(swapInfo.path[swapInfo.path.length - 1]);
+
+            if (address(tokenOut) != address(lockToken)) {
+                revert("Swap did not result in lockToken.");
+            }
+
+            require(swapInfo.feePercent <= PERCENT_BASE, "feePercent exceeds max allowed");
+
             uint tokenOutBalanceBefore = tokenOut.balanceOf(address(this));
             tokenIn.safeTransferFrom(swapInfo.user, address(this), swapInfo.amountIn);
             if (address(tokenOut) != address(tokenIn)) {
@@ -111,7 +119,7 @@ contract VotingVault is Initializable, UUPSUpgradeable, AccessControlUpgradeable
                     swapInfo.minAmountOut,
                     swapInfo.path,
                     address(this),
-                    block.timestamp
+                    deadline
                 );
             }
             uint tokenOutBalanceAfter = tokenOut.balanceOf(address(this));

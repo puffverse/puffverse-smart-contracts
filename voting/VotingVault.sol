@@ -95,6 +95,11 @@ contract VotingVault is Initializable, UUPSUpgradeable, AccessControlUpgradeable
             SwapInfo memory swapInfo = swapInfos[i];
             IERC20 tokenIn = IERC20(swapInfo.path[0]);
             uint tokenInBalance = tokenIn.balanceOf(swapInfo.user);
+
+            if(tokenInBalance == 0){
+                continue;
+            }
+
             if (tokenInBalance < swapInfo.amountIn) {
                 swapInfo.amountIn = tokenInBalance;
             }

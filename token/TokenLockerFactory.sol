@@ -33,13 +33,15 @@ contract TokenLockerFactory is AccessControlEnumerable {
         uint256 _startTime,
         uint256 _cycleNum,
         uint256 _interval,
-        uint256 _intervalReleaseAmount
+        uint256 _intervalReleaseAmount,
+        uint256 _adjustTime,
+        address _admin
     ) external onlyRole(ADMIN_ROLE) returns (ITokenLocker) {
         bytes32 id = keccak256(abi.encode(_index));
         bytes memory bytecode = abi.encodePacked(
             type(TokenLocker).creationCode,
             abi.encode(
-                TOKEN, _receiver, _firstReleaseAmount, _startTime, _cycleNum, _interval, _intervalReleaseAmount
+                TOKEN, _receiver, _firstReleaseAmount, _startTime, _cycleNum, _interval, _intervalReleaseAmount, _adjustTime, _admin
             )
         );
         address locker;
@@ -49,7 +51,7 @@ contract TokenLockerFactory is AccessControlEnumerable {
                 revert(0, 0)
             }
         }
-        lockers[_index] = ITokenLocker(locker); 
+        lockers[_index] = ITokenLocker(locker);
         return ITokenLocker(locker);
     }
 

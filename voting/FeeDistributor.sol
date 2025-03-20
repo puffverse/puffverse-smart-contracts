@@ -70,12 +70,12 @@ contract FeeDistributor is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
     function claim(uint tokenId) external nonReentrant whenNotPaused returns (uint) {
         require(votingEscrow.nftOwner(tokenId) == msg.sender, "Not owner");
-        return _claimFor(tokenId,false);
+        return _claimFor(tokenId, false);
     }
 
-    function claimVE(uint tokenId) external nonReentrant whenNotPaused  {
+    function claimVE(uint tokenId) external nonReentrant whenNotPaused {
         require(address(votingEscrow) == msg.sender, "Not votingEscrow");
-        _claimFor(tokenId,true);
+        _claimFor(tokenId, true);
     }
 
     function _claimFor(uint tokenId, bool isVE) internal returns (uint) {
@@ -117,6 +117,11 @@ contract FeeDistributor is Initializable, UUPSUpgradeable, AccessControlUpgradea
         return _claimable(tokenId, currentWeek);
     }
 
+    function claimableNext(uint tokenId) external view returns (uint) {
+        uint currentWeek = lastTokenTime / WEEK * WEEK + WEEK;
+        return _claimable(tokenId, currentWeek);
+    }
+
     function veAt(uint tokenId, uint timestamp) external view returns (uint) {
         uint maxUserEpoch = votingEscrow.nftPointEpoch(tokenId);
         uint epoch = _findTimestampNftEpoch(tokenId, timestamp, maxUserEpoch);
@@ -134,7 +139,7 @@ contract FeeDistributor is Initializable, UUPSUpgradeable, AccessControlUpgradea
         _totalSupplyCheckpoint();
     }
 
-    function getDonateInfo(uint timestamp) external view returns(uint, uint) {
+    function getDonateInfo(uint timestamp) external view returns (uint, uint) {
         uint week = timestamp / WEEK * WEEK;
         return (votingEscrow.totalPowerAt(week), tokensPerWeek[week]);
     }
@@ -226,9 +231,8 @@ contract FeeDistributor is Initializable, UUPSUpgradeable, AccessControlUpgradea
                 int128 dt = int128(int256(currentWeekCursor - oldNftPoint.ts));
                 uint balanceOf = uint256(SignedMath.max(int256(oldNftPoint.bias - dt * oldNftPoint.slope), 0));
                 if (balanceOf == 0 && nftEpoch > maxNftEpoch) break;
-                if (balanceOf > 0) {
-                    toDistribute += balanceOf * tokensPerWeek[currentWeekCursor] / veSupply[currentWeekCursor] - claimed[tokenId][currentWeekCursor];
-                    claimed[tokenId][currentWeekCursor] += toDistribute;
+                if (balanceOf > 0 && veSupply[currentWeekCursor] > 0) {
+                    toDistribute += _claimUpdate(balanceOf, tokenId, currentWeekCursor);
                 }
                 currentWeekCursor += WEEK;
             }
@@ -241,6 +245,12 @@ contract FeeDistributor is Initializable, UUPSUpgradeable, AccessControlUpgradea
         emit Claimed(tokenId, toDistribute, nftEpoch, maxNftEpoch);
 
         return toDistribute;
+    }
+
+    function _claimUpdate(uint balanceOf, uint tokenId, uint currentWeekCursor) internal returns (uint) {
+        uint reward = balanceOf * tokensPerWeek[currentWeekCursor] / veSupply[currentWeekCursor] - claimed[tokenId][currentWeekCursor];
+        claimed[tokenId][currentWeekCursor] += reward;
+        return reward;
     }
 
     function _claimable(uint tokenId, uint currentWeek) internal view returns (uint) {
@@ -258,7 +268,6 @@ contract FeeDistributor is Initializable, UUPSUpgradeable, AccessControlUpgradea
             nftEpoch = nftEpochOf[tokenId];
         }
         if (nftEpoch == 0) nftEpoch = 1;
-
         IVotingEscrow.Point memory nftPoint = IVotingEscrow.Point(0, 0, 0, 0);
         (nftPoint.bias, nftPoint.slope, nftPoint.ts, nftPoint.blk) = votingEscrow.nftPointHistory(tokenId, nftEpoch);
         if (currentWeekCursor == 0) currentWeekCursor = (nftPoint.ts + WEEK - 1) / WEEK * WEEK;
@@ -284,7 +293,7 @@ contract FeeDistributor is Initializable, UUPSUpgradeable, AccessControlUpgradea
                 int128 dt = int128(int256(currentWeekCursor - oldNftPoint.ts));
                 uint balanceOf = uint256(SignedMath.max(int256(oldNftPoint.bias - dt * oldNftPoint.slope), 0));
                 if (balanceOf == 0 && nftEpoch > maxNftEpoch) break;
-                if (balanceOf > 0) {
+                if (balanceOf > 0 && veSupply[currentWeekCursor] > 0) {
                     toDistribute += balanceOf * tokensPerWeek[currentWeekCursor] / veSupply[currentWeekCursor] - claimed[tokenId][currentWeekCursor];
                 }
                 currentWeekCursor += WEEK;
@@ -324,7 +333,7 @@ contract FeeDistributor is Initializable, UUPSUpgradeable, AccessControlUpgradea
         lastTokenTime = block.timestamp;
         uint currentWeek = lastTokenTime / WEEK * WEEK;
         tokensPerWeek[currentWeek] += toDistribute;
-        tokensTotalWeek[currentWeek]  = votingEscrow.totalLocked();
+        tokensTotalWeek[currentWeek] = votingEscrow.totalLocked();
 
         emit CheckpointToken(block.timestamp, toDistribute);
     }

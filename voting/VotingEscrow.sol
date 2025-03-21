@@ -53,7 +53,7 @@ ERC721HolderUpgradeable
     uint256 public constant MIN_LOCK_AMOUNT = 1e17;
     IERC20 public immutable LOCK_TOKEN;
     IERC721 public immutable BOOST_NFT;
-    IERC721 public  SPEED_NFT;
+    IERC721 public immutable SPEED_NFT;
     ISvgBuilderClient private immutable SVG_BUILDER_CLIENT;
 
     event Deposit(
@@ -134,11 +134,6 @@ ERC721HolderUpgradeable
         require(lastBlockNumberCalled[user] < block.number, "once per block");
         lastBlockNumberCalled[user] = block.number;
         _;
-    }
-
-    function setSpeedNft(IERC721 _speedNFT) external onlyRole(ADMIN_ROLE) {
-        require(address(_speedNFT) != address(0), "invalid speed nft");
-        SPEED_NFT = _speedNFT;
     }
 
     function calculatePoint(uint _lockAmount, uint _duration, uint _boostTokenId, uint _speedTokenId) internal pure returns (uint) {

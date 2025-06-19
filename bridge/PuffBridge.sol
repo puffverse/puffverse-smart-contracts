@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
@@ -107,8 +108,7 @@ contract PuffBridge is Initializable, OwnableUpgradeable, PausableUpgradeable, R
 
     /*------------- 5.1 init -------------*/
     /// @custom:oz-upgrades-unsafe-allow constructor
-    // This is the upgrade contract, in actual practice, the constructor will not be called
-    constructor() initializer {}
+    constructor() { _disableInitializers(); }
 
     // In the production environment, _owner is the multi-signature contract of the foundation
     function initialize(
@@ -122,16 +122,16 @@ contract PuffBridge is Initializable, OwnableUpgradeable, PausableUpgradeable, R
         address[] memory _validators,
         uint8 _validatorThreshold
     ) public initializer {
+        __Ownable_init(_owner);
+        __Pausable_init();
+        __ReentrancyGuard_init();
+
         require(_owner != address(0), "!owner");
         require(_tokenToBridge != address(0), "!token");
         require(_srcChainId != _destChainId, "same chain");
         require(_validators.length > 0, "!validators");
         require(_validatorThreshold > 0, "!threshold");
         require(_validatorThreshold <= _validators.length, "threshold > validators");
-
-        __Ownable_init(_owner);
-        __Pausable_init();
-        __ReentrancyGuard_init();
 
         tokenToBridge = _tokenToBridge;
         bridgeFee = _bridgeFee;

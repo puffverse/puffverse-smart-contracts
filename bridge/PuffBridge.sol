@@ -85,6 +85,9 @@ contract PuffBridge is Initializable, OwnableUpgradeable, PausableUpgradeable, R
     event ValidatorThresholdChanged(uint8 oldThreshold, uint8 newThreshold);
     event BridgeFeeChanged(uint128 oldFee, uint128 newFee);
     event FeeWithdrawnToValidator(address indexed validator, uint256 amount);
+    event OperatorSet(address indexed operator, bool isOperator);
+    event ContractPaused(address indexed pauser);
+    event ContractUnpaused(address indexed unpauser);
 
     /*------------- 4. Modifiers -------------*/
     modifier onlyOperator() {
@@ -102,7 +105,12 @@ contract PuffBridge is Initializable, OwnableUpgradeable, PausableUpgradeable, R
         _;
     }
 
-    // In production environment, _owner is the foundation's multi-signature contract
+    /*------------- 5.1 init -------------*/
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    // This is the upgrade contract, in actual practice, the constructor will not be called
+    constructor() initializer {}
+
+    // In the production environment, _owner is the multi-signature contract of the foundation
     function initialize(
         address _owner,
         address _tokenToBridge,
@@ -145,11 +153,13 @@ contract PuffBridge is Initializable, OwnableUpgradeable, PausableUpgradeable, R
     /*------------- 5.2 onlyOwner -------------*/
     function setOperator(address _operator, bool _isOperator) external onlyOwner {
         isOperator[_operator] = _isOperator;
+        emit OperatorSet(_operator, _isOperator);
     }
 
     /// @notice Only owner can resume contract operation
     function unpause() external onlyOwner {
         _unpause();
+        emit ContractUnpaused(msg.sender);
     }
 
     /**
@@ -188,6 +198,14 @@ contract PuffBridge is Initializable, OwnableUpgradeable, PausableUpgradeable, R
      * @param _bridgeFee new bridge fee
      */
     function setBridgeFee(uint128 _bridgeFee) external onlyOwner {
+        uint128 feeLimit;
+        if (block.chainid == 56) {
+            feeLimit = 0.1 ether;
+        } else {
+            feeLimit = 100 ether;
+        }
+        require(_bridgeFee <= feeLimit, "fee exceeds limit");
+        
         uint128 oldFee = bridgeFee;
         bridgeFee = _bridgeFee;
         emit BridgeFeeChanged(oldFee, _bridgeFee);
@@ -197,6 +215,7 @@ contract PuffBridge is Initializable, OwnableUpgradeable, PausableUpgradeable, R
     /// @notice Both operator and validators can pause the contract
     function pause() external onlyOperatorOrValidator {
         _pause();
+        emit ContractPaused(msg.sender);
     }
 
     /**
@@ -291,8 +310,8 @@ contract PuffBridge is Initializable, OwnableUpgradeable, PausableUpgradeable, R
     function lockOrBurn(uint256 amount, address receiver) external payable whenNotPaused {
         require(amount > 0, "!amount");
         require(receiver != address(0), "!receiver");
-        require(msg.value >= bridgeFee, "insufficient fee");
-        // 🔒 Prevent numeric overflow
+        require(msg.value == bridgeFee, "invalid bridge fee");
+        // 🔒 Prevent overflow
         require(amount <= type(uint128).max, "amount too large");
 
         // Update nonce
